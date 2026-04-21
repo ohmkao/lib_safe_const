@@ -77,6 +77,40 @@ RSpec.describe LibSafeConst do
         expect(instance.safe_const(:my_const)).to eq("const_value")
       end
     end
+
+    # =============================================
+    # inherit: 參數（v1.1.0+）
+    # =============================================
+    context "inherit: 參數" do
+      before(:all) do
+        unless self.class.const_defined?(:InheritParent)
+          self.class.const_set(:InheritParent, Class.new do
+            include LibSafeConst
+            const_set(:INHERITED_CONST, "from_parent")
+          end,)
+        end
+        unless self.class.const_defined?(:InheritChild)
+          self.class.const_set(:InheritChild, Class.new(self.class::InheritParent))
+        end
+      end
+
+      it "預設 inherit: true 時會沿繼承鏈查找" do
+        expect(self.class::InheritChild.safe_const(:INHERITED_CONST)).to eq("from_parent")
+      end
+
+      it "inherit: false 時僅查當前類別，不含繼承" do
+        expect(self.class::InheritChild.safe_const(:INHERITED_CONST, inherit: false)).to be_nil
+      end
+
+      it "inherit: false 時當前類別有定義則正常取得" do
+        expect(self.class::InheritParent.safe_const(:INHERITED_CONST, inherit: false)).to eq("from_parent")
+      end
+
+      it "指定 obj 搭配 inherit: false" do
+        expect(instance.safe_const(:INHERITED_CONST, self.class::InheritChild, inherit: false)).to be_nil
+        expect(instance.safe_const(:INHERITED_CONST, self.class::InheritChild, inherit: true)).to eq("from_parent")
+      end
+    end
   end
 
   # =============================================

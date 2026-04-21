@@ -16,7 +16,7 @@
 本 gem 不發布至 rubygems.org，請透過 GitHub tag 安裝。在你的 `Gemfile` 中加入：
 
 ```ruby
-gem "lib_safe_const", github: "ohmkao/lib_safe_const", tag: "v1.0.0"
+gem "lib_safe_const", github: "ohmkao/lib_safe_const", tag: "v1.1.0"
 ```
 
 然後執行：
@@ -53,6 +53,20 @@ obj = MyClass.new
 obj.safe_const(:MY_CONST)    # => "hello"
 obj.safe_const(:NOT_EXIST)   # => nil
 obj.safe_const(:my_const)    # => "hello"（自動大寫轉換）
+```
+
+自 **v1.1.0** 起支援 `inherit:` 關鍵字參數（預設 `true`）。`inherit: false` 時僅查當前類別，不走祖先鏈：
+
+```ruby
+class Parent
+  include LibSafeConst
+  INHERITED = "from_parent"
+end
+
+class Child < Parent; end
+
+Child.safe_const(:INHERITED)                  # => "from_parent"（預設繼承）
+Child.safe_const(:INHERITED, inherit: false)  # => nil（僅查自己）
 ```
 
 #### `safe_fetch`
@@ -115,7 +129,7 @@ Provides two methods — `safe_const` and `safe_fetch` — that let you read con
 This gem is not published to rubygems.org. Install it via GitHub tag. Add to your `Gemfile`:
 
 ```ruby
-gem "lib_safe_const", github: "ohmkao/lib_safe_const", tag: "v1.0.0"
+gem "lib_safe_const", github: "ohmkao/lib_safe_const", tag: "v1.1.0"
 ```
 
 Then run:
@@ -152,6 +166,20 @@ Safely fetch a constant; returns `nil` if undefined (no exception raised):
 obj.safe_const(:MY_CONST)    # => "hello"
 obj.safe_const(:NOT_EXIST)   # => nil
 obj.safe_const(:my_const)    # => "hello" (auto-uppercased)
+```
+
+Since **v1.1.0**, `safe_const` accepts an `inherit:` keyword argument (default `true`). Pass `inherit: false` to look up the constant on the current class only, skipping ancestors:
+
+```ruby
+class Parent
+  include LibSafeConst
+  INHERITED = "from_parent"
+end
+
+class Child < Parent; end
+
+Child.safe_const(:INHERITED)                  # => "from_parent" (default: inherits)
+Child.safe_const(:INHERITED, inherit: false)  # => nil (own-class only)
 ```
 
 #### `safe_fetch`

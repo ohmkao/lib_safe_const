@@ -9,6 +9,7 @@ require_relative "lib_safe_const/version"
 # Description:
 #   <safe_const>
 #     - 使用物件內部的常數或方法, 無需先行確認是否存在，只能用  Symbol + 『全大寫』
+#     - 支援 inherit: 關鍵字參數（預設 true）；inherit: false 僅查當前類別不走祖先鏈
 #   <safe_fetch>
 #     - 依序取得 args 內容，如果是 nil 就跳過
 #     - 如果是 Symbol +『全大寫』就檢查是否有定義『常數（constant）』
@@ -65,10 +66,13 @@ module LibSafeConst
     #      XXXX_YYYY  #// 如果有定義
     #      nil        #// 如果沒定義
     #
-    def safe_const(const_name, obj = self)
+    # inherit 參數（v1.1.0+）：
+    #   - inherit: true  （預設）沿祖先鏈查找，與 Ruby 原生 const_defined?/const_get 預設行為一致
+    #   - inherit: false 僅查當前類別自身定義，適用於「不想誤收繼承常數」的場景
+    def safe_const(const_name, obj = self, inherit: true)
       const_name_ = const_name.to_s.upcase
       self_klass = %w[Class Module].include?(obj.class.name) ? obj : obj.class
-      self_klass.const_get(const_name_) if self_klass.const_defined?(const_name_)
+      self_klass.const_get(const_name_, inherit) if self_klass.const_defined?(const_name_, inherit)
     end
   end
 end
