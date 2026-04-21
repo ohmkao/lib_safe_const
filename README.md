@@ -16,7 +16,7 @@
 本 gem 不發布至 rubygems.org，請透過 GitHub tag 安裝。在你的 `Gemfile` 中加入：
 
 ```ruby
-gem "lib_safe_const", github: "ohmkao/lib_safe_const", tag: "v1.1.0"
+gem "lib_safe_const", github: "ohmkao/lib_safe_const", tag: "v1.2.0"
 ```
 
 然後執行：
@@ -129,7 +129,7 @@ Provides two methods — `safe_const` and `safe_fetch` — that let you read con
 This gem is not published to rubygems.org. Install it via GitHub tag. Add to your `Gemfile`:
 
 ```ruby
-gem "lib_safe_const", github: "ohmkao/lib_safe_const", tag: "v1.1.0"
+gem "lib_safe_const", github: "ohmkao/lib_safe_const", tag: "v1.2.0"
 ```
 
 Then run:

@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-04-22
+
+### Added
+- `safe_fetch_local(*args)` — `safe_fetch` 的精確版：
+  - 常數查找使用 `inherit: false`（僅當前類別，不走祖先鏈）
+  - 支援 `Proc` / `Lambda` fallback：傳入 Proc 物件會被自動 `.call`，避免 eager evaluation 副作用
+  - 適用於「內部程式邏輯 + 需精確常數來源 + 有昂貴 fallback」的場景
+- RSpec 新增 `safe_fetch_local` 測試 context（+8 examples）
+
+### Changed
+- 內部抽出 `_do_safe_fetch` private helper，`safe_fetch` / `safe_fetch_local` 共用底層邏輯
+- `safe_fetch` 對外語意**完全不變**（inherit: true、Proc 視為字面值）
+
+### Fixed
+- 修正 `safe_fetch` 既有 sentinel bug：所有 args 皆為 nil 時，原本回傳 `NilClass` class 物件（**truthy**，導致 `safe_fetch(...) || "default"` 不走 fallback），修正為回傳真正的 `nil`
+- 相關 spec（`所有來源都是 nil 時` / `無參數`）移除 `satisfy` 容忍 matcher，改為嚴格 `to be_nil`
+
 ## [1.1.0] - 2026-04-22
 
 ### Added

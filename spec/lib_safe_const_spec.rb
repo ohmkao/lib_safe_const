@@ -201,9 +201,8 @@ RSpec.describe LibSafeConst do
         expect(instance.safe_fetch(:NOT_EXIST, :@not_exist, :MY_CONST)).to eq("const_value")
       end
 
-      it "所有來源都是 nil 時回傳 nil" do
-        result = instance.safe_fetch(:NOT_EXIST, :@not_exist)
-        expect(result).to satisfy("be nil or NilClass sentinel") { |v| v.nil? || v == NilClass }
+      it "所有來源都是 nil 時回傳 nil（v1.2.0 修正 sentinel bug）" do
+        expect(instance.safe_fetch(:NOT_EXIST, :@not_exist)).to be_nil
       end
 
       it "混合多種類型的 Fallback" do
@@ -224,9 +223,82 @@ RSpec.describe LibSafeConst do
     # safe_fetch - 無參數
     # =============================================
     context "無參數" do
-      it "回傳 nil" do
-        result = instance.safe_fetch
-        expect(result).to satisfy("be nil or NilClass sentinel") { |v| v.nil? || v == NilClass }
+      it "回傳 nil（v1.2.0 修正 sentinel bug）" do
+        expect(instance.safe_fetch).to be_nil
+      end
+    end
+  end
+
+  # =============================================
+  # safe_fetch_local（v1.2.0+）
+  # =============================================
+  describe "#safe_fetch_local" do
+    context "inherit: false（僅查當前類別）" do
+      before(:all) do
+        unless self.class.const_defined?(:LocalFetchParent)
+          self.class.const_set(:LocalFetchParent, Class.new do
+            include LibSafeConst
+            const_set(:SHARED, "from_parent")
+          end,)
+        end
+        unless self.class.const_defined?(:LocalFetchChild)
+          self.class.const_set(:LocalFetchChild, Class.new(self.class::LocalFetchParent))
+        end
+      end
+
+      it "子類別不繼承父類常數（走到後續 fallback）" do
+        # 若繼承：拿到 "from_parent"；不繼承：走到 "fallback"
+        result = self.class::LocalFetchChild.safe_fetch_local(:SHARED, "fallback")
+        expect(result).to eq("fallback")
+      end
+
+      it "父類自身可取得（inherit: false 不影響 own class）" do
+        expect(self.class::LocalFetchParent.safe_fetch_local(:SHARED)).to eq("from_parent")
+      end
+
+      it "全無值時回傳 nil" do
+        expect(self.class::LocalFetchChild.safe_fetch_local(:SHARED)).to be_nil
+      end
+    end
+
+    context "Proc / Lambda lazy 支援" do
+      it "Proc 物件被自動 .call" do
+        expect(instance.safe_fetch_local(-> { "lazy_value" })).to eq("lazy_value")
+      end
+
+      it "Lambda 也適用" do
+        expect(instance.safe_fetch_local(lambda { "lambda_value" })).to eq("lambda_value")
+      end
+
+      it "前面命中時後面的 Proc 不被呼叫（驗證 lazy）" do
+        counter = 0
+        expensive = -> { counter += 1; "expensive" }
+        result = instance.safe_fetch_local(:MY_CONST, expensive)
+        expect(result).to eq("const_value")
+        expect(counter).to eq(0)
+      end
+
+      it "前面 nil 時 Proc 才被呼叫" do
+        counter = 0
+        expensive = -> { counter += 1; "expensive" }
+        result = instance.safe_fetch_local(:NOT_EXIST, expensive)
+        expect(result).to eq("expensive")
+        expect(counter).to eq(1)
+      end
+
+      it "Proc 回傳 nil 時跳過到下一個" do
+        expect(instance.safe_fetch_local(-> { nil }, "fallback")).to eq("fallback")
+      end
+    end
+
+    context "與 safe_fetch 的行為差異" do
+      it "safe_fetch 視 Proc 為字面值（不展開）" do
+        my_proc = -> { "lazy" }
+        expect(instance.safe_fetch(my_proc)).to be(my_proc)
+      end
+
+      it "safe_fetch_local 展開 Proc" do
+        expect(instance.safe_fetch_local(-> { "lazy" })).to eq("lazy")
       end
     end
   end
