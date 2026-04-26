@@ -38,6 +38,55 @@
 
 ---
 
+## v1.2.0 (2026-04-22) — 為什麼 `safe_fetch` 本身不擴張 Proc 支援
+
+### 背景
+
+v1.2.0 加 lazy fallback 時，理論上有兩條路：
+
+- **A) 直接擴張既有方法**：在 `safe_fetch` 加 Proc 自動 `.call`
+- **B) 拆出 `safe_fetch_local`**：新方法，預設 Proc 自動 `.call`
+
+選了 B。除了「兩個維度打包成新方法」（見上一條目）之外，還有 4 個獨立論點支持「`safe_fetch` 本身**不能**擴張」：
+
+### 論點 1：向後相容（contract 問題）
+
+v1.0 / v1.1 已對外發布。呼叫端就算罕見，也可能傳 Proc 當「字面值 fallback」（例如把 Proc 物件本身當 sentinel / 標記）。改成自動 `.call` 是**靜默 breaking change** — 比 sentinel bug 還嚴重，因為 sentinel 是修錯誤、這個是改正確語意。
+
+### 論點 2：語義一致性（API 美學）
+
+`safe_fetch` 的識別規則：「**Symbol 才有特殊處理**（常數 / 實例變數 / 方法），其他型別**一律字面值**」。Proc 屬「其他型別」，特例化它會讓識別表多一個分支，破壞最小驚訝。
+
+### 論點 3：fallback 多半 cheap，不需 lazy
+
+實際使用 95% 是 `safe_fetch(:CONST, "default")` / `safe_fetch(:@var, 0)`，fallback cost ≈ 0。為了 5% 昂貴 fallback 改變預設語意不划算。
+
+### 論點 4：意圖明示原則
+
+Lazy evaluation 是**想要**的特殊行為，不是**應該**的預設。要 lazy 就 opt-in 到 `_local`，不要在 `safe_fetch` 偷偷觸發。避免帶副作用的 Proc 被意外 `.call`。
+
+### 補：`safe_fetch(AAA.call, ...)` 不算「使用 Proc」
+
+呼叫端寫 `safe_fetch(AAA.call, :ASDF, '00000')` 並**不是**讓 Proc 參與 fallback — Ruby 求值規則會在 method 呼叫前先 `.call`，Proc 退化成普通值，無論結果是字串、nil 或副作用都已發生。
+
+```ruby
+# Eager — AAA.call 一定先執行（無論後面有沒有值）
+safe_fetch(AAA.call, :ASDF, '00000')
+# 等同：safe_fetch(AAA.call_result, :ASDF, '00000')
+# Proc 包裝在這完全沒意義
+
+# Lazy — AAA 只在 :ASDF 為 nil 時才執行
+safe_fetch_local(:ASDF, AAA)
+```
+
+要真正 lazy fallback **必須**傳 Proc 物件本身（不加 `.call`），並用 `safe_fetch_local`。
+
+### 結論
+
+`safe_fetch` 維持「Symbol 識別 + 其他字面值」的純粹語意；lazy fallback 走 `safe_fetch_local`。兩者並存是**有意的分工，不是冗餘**。
+
+---
+
 ## v1.2.0 (2026-04-22) — sentinel bug 的修法
 
 ### 背景
