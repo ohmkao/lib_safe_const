@@ -1,0 +1,129 @@
+# Design Decisions
+
+設計決策流水帳。每個版本記錄「為什麼這樣選」— 哪些選項被考慮、決策動機、後果。
+做了什麼的事實清單請見 [CHANGELOG.md](CHANGELOG.md)。
+
+倒序排列，最新在最上面。
+
+---
+
+## v1.2.0 (2026-04-22) — `safe_fetch_local` 為什麼是新方法、不是 keyword
+
+### 背景
+
+`lib_auto_registry` v2.x 子類別讀 `REGISTRY_*` 常數時需要兩件事同時成立：
+
+1. **inherit: false** — 不能誤繼承 owner 層級的 `REGISTRY_PREFIX` / `REGISTRY_ABSTRACT`
+2. **lazy fallback** — fallback 可能涉及 DB 查詢 / registry 重算，不希望 eager 觸發
+
+### 選項
+
+- **A) keyword 路線**：`safe_fetch(*args, inherit: false, lazy: true)`
+- **B) 新方法路線**：`safe_fetch_local(*args)` — 把兩個非預設行為打包成一個拋棄式組合
+
+### 決策：B
+
+### 動機
+
+- 同時改變**兩個語意維度**（常數查找祖先鏈 + Proc 處理），打包成新方法比兩個 keyword 清晰
+- 對比 v1.1.0 `safe_const` 加 `inherit:` keyword：那次只改一個 boolean 維度，且對齊 Ruby 原生 `const_defined?(name, inherit=true)` 慣例 — 路線不同有理
+- 名字 `_local` 表達「鎖定當前作用域」，可讀性勝過呼叫端寫 `inherit: false, lazy: true`
+- 想要「精確 + lazy fallback」的場景幾乎總是綁在一起；獨立 keyword 反而會誘人單獨打開、產生半套組合
+
+### 後果
+
+- API 表面增加一個方法
+- `safe_fetch` 對外語意**完全不變**（向後相容）
+- 內部抽 `_do_safe_fetch(args, inherit:, lazy:)` private helper，兩者共用底層邏輯
+
+---
+
+## v1.2.0 (2026-04-22) — sentinel bug 的修法
+
+### 背景
+
+v1.0.0 ~ v1.1.0 的 `safe_fetch` 借 `NilClass` class 作為 sentinel 推進 args：
+
+```ruby
+args.push(NilClass).each do |arg|
+  ...
+  break out_ unless out_.nil?
+  break nil if arg.is_a?(NilClass)
+end
+```
+
+**陷阱**：當所有 args 解析結果皆為 nil 時，某些路徑下 sentinel 會被當成「下一個 arg 的 out_」回傳 — 導致回傳的是 `NilClass` class 物件本身（**truthy**），而非真正的 `nil`。
+
+呼叫端慣用的 `safe_fetch(...) || "default"` 寫法因此**不走 fallback**。
+
+### 選項
+
+- **A) sentinel 換成 unique object**（如 `SENTINEL = Object.new`）
+- **B) 改用 `each + return` 模式**，顯式回 `nil`
+
+### 決策：B
+
+### 動機
+
+- B 更直白，無需引入私有 sentinel 物件
+- 結合「同時要新增 `safe_fetch_local`」的時機，順便把底層邏輯抽成 `_do_safe_fetch`，sentinel 問題自然消失
+- 對外語意修正為文件原本宣稱的「全 nil 回 nil」
+
+### 後果
+
+- 舊寫法 `safe_fetch(...) || "default"` 從此正確走 fallback（**靜默修正**，無破壞性變更）
+- spec 從 `satisfy { |v| v.nil? || v == NilClass }` 容忍 matcher 改為嚴格 `to be_nil`
+- ⚠️ 若下游程式碼曾經**依賴錯誤的 `NilClass` 回傳值**做判斷，升級到 v1.2.0 後會失效；但這是錯誤用法，不視為 breaking change
+
+---
+
+## v1.1.0 (2026-04-22) — `safe_const` 為什麼選 keyword、不是新方法
+
+### 背景
+
+`lib_auto_registry` 子類別誤繼承 owner 層級的 `REGISTRY_PREFIX` / `REGISTRY_ABSTRACT`，需要「只查當前類別、不沿祖先鏈」的常數查找。
+
+### 選項
+
+- **A) 新增方法**：`safe_const_local(const_name, obj = self)`
+- **B) 加 keyword**：`safe_const(const_name, obj = self, inherit: true)`
+
+### 決策：B
+
+### 動機
+
+- 對齊 Ruby 原生 `Module#const_defined?(name, inherit=true)` / `Module#const_get(name, inherit=true)` 簽章 — 使用者已經熟悉這個 boolean
+- 只改**一個**維度（祖先鏈 on/off），keyword 清晰，不增加 API 表面
+- 預設 `true` 維持向後相容
+
+### 後果
+
+- 後續 v1.2.0 因為要同時改**兩個**維度（常數查找 + Proc 處理），改採新方法路線（`safe_fetch_local`），與此次決策**路線不同**
+- 這個對比是刻意的：單維度用 keyword、多維度組合包成新方法
+
+---
+
+## v1.0.0 (2026-04-18) — 抽 gem 為什麼剝離 ActiveSupport
+
+### 背景
+
+原 `app/lib/lib_safe_const.rb` v4（2025-02-12，於 abyss_portal 專案內）使用了 ActiveSupport 的 `String#in?` 與 `Object#try`。
+
+### 選項
+
+- **A) 保留 ActiveSupport 依賴**：抽 gem 但保留 `require "active_support/core_ext/..."`
+- **B) 改寫成純 Ruby**：`Array#include?` 取代 `in?`、`respond_to?` + `send` 取代 `try`
+
+### 決策：B
+
+### 動機
+
+- 通用工具不應強迫下游帶 ActiveSupport（含其載入時間與相依鏈）
+- 純 Ruby 環境（不一定是 Rails 專案）也應可用
+- 行為等價，沒有功能損失
+
+### 後果
+
+- gem 真正零依賴（gemspec 無 runtime dependency）
+- abyss_portal 母專案行為完全不變
+- README 標題突顯「pure Ruby, zero dependencies」作為對外賣點

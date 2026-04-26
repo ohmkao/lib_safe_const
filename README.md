@@ -9,7 +9,7 @@
 
 ## 中文
 
-提供 `safe_const` 與 `safe_fetch` 兩個方法，在不事先確認目標是否存在的情況下安全取值，並支援多來源 fallback 語法。
+提供 `safe_const`、`safe_fetch`、`safe_fetch_local` 三個方法，在不事先確認目標是否存在的情況下安全取值，並支援多來源 fallback 語法。
 
 ### 安裝
 
@@ -92,7 +92,37 @@ obj.safe_fetch(:NOT_EXIST, :@my_var, "fallback")
 | `:@xxx`（`@` 開頭 Symbol） | 讀取實例變數 |
 | `:__xxx__`（雙底線前後綴 Symbol） | 呼叫同名方法（方法不存在不拋錯） |
 | `:xxx`（一般小寫 Symbol） | 視為一般值直接回傳 |
-| 其他（String / Integer / Hash / ...） | 直接回傳 |
+| 其他（String / Integer / Hash / ...） | 直接回傳（`safe_fetch_local` 對 `Proc` / `Lambda` 例外，自動 `.call`） |
+
+#### `safe_fetch_local`（v1.2.0+）
+
+`safe_fetch` 的精確版，差異**只有兩點**，但通常綁在一起：
+
+| 行為 | `safe_fetch` | `safe_fetch_local` |
+|---|---|---|
+| 常數查找 | `inherit: true`（含祖先鏈） | `inherit: false`（僅當前類別） |
+| 遇 `Proc` / `Lambda` | 視為字面值直接回傳 | 自動 `.call`（lazy evaluation） |
+
+```ruby
+class Parent
+  include LibSafeConst
+  SHARED = "from_parent"
+end
+
+class Child < Parent; end
+
+# 常數繼承差異
+Child.safe_fetch(:SHARED)        # => "from_parent"（沿祖先鏈）
+Child.safe_fetch_local(:SHARED)  # => nil（只查 Child 自己）
+
+# Proc 作為昂貴 fallback：只在前面都 nil 時才 .call
+Child.safe_fetch_local(:SHARED, -> { expensive_compute })
+```
+
+**使用情境**：內部框架邏輯需「精確控制常數來源 + 昂貴 fallback」的場景。典型例：[lib_auto_registry](https://github.com/ohmkao/lib_auto_registry) 讀子類別 `REGISTRY_*` 常數時避免誤繼承 owner 層級設定。
+
+> [!WARNING]
+> **v1.2.0 同時修正 sentinel bug**：v1.1.0 以前 `safe_fetch(...) || "default"` 在所有 args 全 nil 時不會走 fallback（會回傳 `NilClass` class 物件，truthy）。升級到 v1.2.0 即修正，呼叫端**不需改動**。
 
 #### Class Method
 
@@ -122,7 +152,7 @@ bundle exec rspec
 
 ## English
 
-Provides two methods — `safe_const` and `safe_fetch` — that let you read constants, instance variables, or invoke methods without checking existence first, with built-in fallback chains.
+Provides three methods — `safe_const`, `safe_fetch`, and `safe_fetch_local` — that let you read constants, instance variables, or invoke methods without checking existence first, with built-in fallback chains.
 
 ### Installation
 
@@ -205,7 +235,37 @@ obj.safe_fetch(:NOT_EXIST, :@my_var, "fallback")
 | `:@xxx` (Symbol starting with `@`) | Read the instance variable |
 | `:__xxx__` (double-underscore wrapped Symbol) | Call the method (no error if method is missing) |
 | `:xxx` (regular lowercase Symbol) | Treated as a literal value, returned as-is |
-| Anything else (String / Integer / Hash / ...) | Returned as-is |
+| Anything else (String / Integer / Hash / ...) | Returned as-is (`safe_fetch_local` makes an exception for `Proc` / `Lambda`, auto-calling them) |
+
+#### `safe_fetch_local` (v1.2.0+)
+
+A stricter sibling of `safe_fetch`. The difference is **only two points**, but they usually come together:
+
+| Behavior | `safe_fetch` | `safe_fetch_local` |
+|---|---|---|
+| Constant lookup | `inherit: true` (walks ancestor chain) | `inherit: false` (current class only) |
+| `Proc` / `Lambda` argument | Treated as a literal, returned as-is | Auto `.call` (lazy evaluation) |
+
+```ruby
+class Parent
+  include LibSafeConst
+  SHARED = "from_parent"
+end
+
+class Child < Parent; end
+
+# Constant inheritance difference
+Child.safe_fetch(:SHARED)        # => "from_parent" (walks ancestors)
+Child.safe_fetch_local(:SHARED)  # => nil (Child's own scope only)
+
+# Proc as expensive fallback: only .called when everything before resolves to nil
+Child.safe_fetch_local(:SHARED, -> { expensive_compute })
+```
+
+**Use case**: internal framework logic that needs "precise constant source + expensive fallback". Typical example: [lib_auto_registry](https://github.com/ohmkao/lib_auto_registry) reading per-subclass `REGISTRY_*` constants without accidentally inheriting from the owner level.
+
+> [!WARNING]
+> **v1.2.0 also fixes a sentinel bug**: prior to v1.2.0, `safe_fetch(...) || "default"` would not fall through when every argument resolved to `nil` — it returned the `NilClass` class object (truthy) instead. Upgrading to v1.2.0 fixes this; **no caller-side changes needed**.
 
 #### Class Methods
 
