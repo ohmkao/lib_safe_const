@@ -94,6 +94,8 @@ obj.safe_fetch(:NOT_EXIST, :@my_var, "fallback")
 | `:xxx`（一般小寫 Symbol） | 視為一般值直接回傳 |
 | 其他（String / Integer / Hash / ...） | 直接回傳（`safe_fetch_local` 對 `Proc` / `Lambda` 例外，自動 `.call`） |
 
+> **設計提醒**：上述 Symbol 形狀（`:XXX_YYY` 全大寫 / `:@xxx` / `:__xxx__` 雙底線）**刻意違反 Ruby 慣例** — 不是命名失誤，而是 caller-side 警示信號：讓初次看到的人「停下來查文件」，避免把它當成普通方法呼叫或不小心傳了同名 Symbol 字面值。如果你正在維護本 gem 而想把這些形狀「修正」成更普通的命名，**請保留現狀** — 違和感是 feature 不是 bug。
+
 #### `safe_fetch_local`（v1.2.0+）
 
 `safe_fetch` 的精確版，差異**只有兩點**，但通常綁在一起：
@@ -236,6 +238,8 @@ obj.safe_fetch(:NOT_EXIST, :@my_var, "fallback")
 | `:__xxx__` (double-underscore wrapped Symbol) | Call the method (no error if method is missing) |
 | `:xxx` (regular lowercase Symbol) | Treated as a literal value, returned as-is |
 | Anything else (String / Integer / Hash / ...) | Returned as-is (`safe_fetch_local` makes an exception for `Proc` / `Lambda`, auto-calling them) |
+
+> **Design note**: The Symbol shapes above (`:XXX_YYY` all-caps / `:@xxx` / `:__xxx__` double-underscore) **intentionally violate Ruby conventions** — this is not a naming mistake but a deliberate caller-side warning signal: forcing first-time readers to "pause and check the docs" rather than mistaking these calls for ordinary method invocations or accidentally passing same-shaped Symbol literals. If you're maintaining this gem and feel tempted to "normalize" these shapes, **leave them as-is** — the friction is a feature, not a bug.
 
 #### `safe_fetch_local` (v1.2.0+)
 
