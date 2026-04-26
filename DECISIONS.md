@@ -124,6 +124,37 @@ end
 - spec 從 `satisfy { |v| v.nil? || v == NilClass }` 容忍 matcher 改為嚴格 `to be_nil`
 - ⚠️ 若下游程式碼曾經**依賴錯誤的 `NilClass` 回傳值**做判斷，升級到 v1.2.0 後會失效；但這是錯誤用法，不視為 breaking change
 
+### 後果分析（為什麼這 bug 值得修）
+
+bug 不會在 `safe_fetch` 內部 crash，而是把 `NilClass` class 物件當「毒素」傳到下游後才出問題 — 屬於**靜默危險**。
+
+行為對照：
+
+| 操作 | v1.0/1.1（bug） | v1.2.0 |
+|---|---|---|
+| 回傳值 | `NilClass`（class 物件本身） | `nil` |
+| `.nil?` | `false` | `true` |
+| `== nil` | `false` | `true` |
+| truthy？ | **truthy** | falsy |
+| `.to_s` | `"NilClass"` | `""` |
+| `.class` | `Class` | `NilClass` |
+
+實務毒性場景（由低到高）：
+
+1. **fallback 失效**：`safe_fetch(:NOT_EXIST) || "default"` 回傳 `NilClass`，不走 `||`
+2. **短路判斷誤判**：`return unless safe_fetch(:OPT)` 因 truthy 不會 return，下游拿到 `NilClass`
+3. **序列化下游污染**：`JSON.generate({ x: safe_fetch(:NOT_EXIST) })` → `'{"x":"NilClass"}'` — 字串 `"NilClass"` 寫進 JSON
+4. **DB 寫入污染**：`record.update(field: safe_fetch(:NOT_EXIST))` → 欄位寫入字串 `"NilClass"` 或類型錯誤，比 `NULL` 更難察覺
+5. **case/when 命中錯支**：`when Class` 會命中（`NilClass` 是 `Class` 的 instance）
+
+debug 線索差別：v1.0/1.1 路徑拋的錯訊會出現 `NilClass:Class` 反直覺字串（class object 的 inspect 形式），易誤導為 metaclass / 元程式設計問題。
+
+### 實務觸發頻率
+
+慣用寫法多數帶非 nil 兜底（`safe_fetch(:KEY, "default")` / `safe_fetch(:K, [])`），fallback 字面值會在「全 nil」之前命中 — bug 在實務上**極少**實際觸發。
+
+本次屬於**預防性修正**：拆除未爆彈，無 user-visible 故障需追溯。風險不在現有程式碼，而在未來新寫的「無兜底 + truthy 判斷」組合。
+
 ---
 
 ## v1.1.0 (2026-04-22) — `safe_const` 為什麼選 keyword、不是新方法
